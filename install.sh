@@ -61,6 +61,12 @@ command_hint() {
   printf '  %s%s%s\n' "$CYAN" "$1" "$RESET"
 }
 
+indented_block() {
+  while IFS= read -r line; do
+    printf '    %s\n' "$line"
+  done
+}
+
 confirm() {
   local prompt="$1"
   local answer
@@ -200,6 +206,63 @@ install_bridge() {
   ok "Cloned $INSTALL_DIR"
 }
 
+show_existing_alias() {
+  local shell_rc="$1"
+  local begin_marker="$2"
+  local end_marker="$3"
+  local found=0
+  local alias_lines
+
+  info "Current alias config in $shell_rc:" >&2
+  if [[ ! -f "$shell_rc" ]]; then
+    warn "Shell config file does not exist yet" >&2
+    return
+  fi
+
+  if grep -qF "$begin_marker" "$shell_rc"; then
+    found=1
+    info "Existing managed block:" >&2
+    awk -v begin="$begin_marker" -v end="$end_marker" '
+      $0 == begin {
+        in_block = 1
+      }
+      in_block {
+        print
+      }
+      $0 == end {
+        in_block = 0
+      }
+    ' "$shell_rc" | indented_block >&2
+  fi
+
+  alias_lines="$(awk -v alias_name="$ALIAS_NAME" '
+    /^[[:space:]]*alias[[:space:]]+/ {
+      rest = $0
+      sub(/^[[:space:]]*alias[[:space:]]+/, "", rest)
+      if (rest == alias_name || index(rest, alias_name "=") == 1 || index(rest, alias_name " ") == 1) {
+        printf "line %d: %s\n", NR, $0
+      }
+    }
+  ' "$shell_rc")"
+
+  if [[ -n "$alias_lines" ]]; then
+    found=1
+    info "Existing alias line(s):" >&2
+    printf '%s\n' "$alias_lines" | indented_block >&2
+  fi
+
+  if [[ "$found" == "0" ]]; then
+    warn "No existing $ALIAS_NAME alias found" >&2
+  fi
+}
+
+show_alias_plan() {
+  local alias_line="$1"
+
+  info "Alias line to add/update:" >&2
+  printf '%s\n' "$alias_line" | indented_block >&2
+}
+
 install_alias() {
   local begin_marker="# >>> phone-cli-bridge >>>"
   local end_marker="# <<< phone-cli-bridge <<<"
@@ -216,6 +279,9 @@ install_alias() {
   fi
 
   block="$(printf '%s\n%s\n%s\n' "$begin_marker" "$alias_line" "$end_marker")"
+
+  show_existing_alias "$shell_rc" "$begin_marker" "$end_marker"
+  show_alias_plan "$alias_line"
 
   if ! confirm "Add or update $ALIAS_NAME alias in $shell_rc"; then
     warn "Skipping alias setup" >&2
