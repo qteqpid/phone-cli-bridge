@@ -131,12 +131,12 @@ Phone CLI Bridge
   -cmd, --cmd              tmux 会话里启动的命令；不指定时只创建会话，不自动运行命令
 
 示例：
-  cd /Users/gongliang_zhang/Desktop/ios开发/book_reader
+  cd /Users/user_name/project_dir
   phone-bridge -r
 
   phone-bridge -r -p 8766
 
-  phone-bridge -r -w ~/repos/treehouse -s phone-cli-treehouse -p 8766 -t my-fixed-token -n Treehouse -cmd "your-cli-command"
+  phone-bridge -r -s phone-cli-project -p 8765 -t my-token -n Fun -cmd "your-cli-command"
 
   phone-bridge -k
 `.trim());
@@ -206,7 +206,7 @@ if (shouldRun && ARGS.some((arg) => arg === "-t" || arg === "--token") && !TOKEN
 }
 
 if (shouldRun && ARGS.some((arg) => arg === "-n" || arg === "--title" || arg.startsWith("--title=")) && !TITLE_ARG) {
-  console.error("缺少标题值。用法：phone-bridge -r -n Treehouse");
+  console.error("缺少标题值。用法：phone-bridge -r -n Fun");
   process.exit(1);
 }
 
