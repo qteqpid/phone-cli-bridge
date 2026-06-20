@@ -1,6 +1,102 @@
 # Phone CLI Bridge
 
-## 这个工具做什么用
+| [**English**](#english) | [中文](#chinese) |
+| --- | --- |
+
+<a id="english"></a>
+
+## English
+
+### What This Tool Does
+
+Phone CLI Bridge lets you remotely control a tmux CLI session on your Mac from a phone browser.
+
+```text
+iPhone Safari
+  -> Phone CLI Bridge
+  -> tmux session
+  -> CLI command
+  -> local project files
+```
+
+Your phone is only the input and display surface. Commands still run on your Mac, and file reads, file writes, builds, and tests all happen locally on the Mac.
+
+It is useful when you need to check or operate long-running command-line tasks from your phone, such as AI coding CLIs, shells, REPLs, SSH sessions, build scripts, test scripts, or other interactive terminal programs.
+
+Web UI example:
+
+<img src="./phone_screen.jpg" alt="Web UI screenshot" width="280">
+
+### Installation
+
+Install with the recommended one-line command:
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/qteqpid/phone-cli-bridge/master/install.sh)"
+```
+
+The install script checks for Homebrew, Node.js, tmux, and git, then pulls the project code. By default, it installs to `~/my_repos/phone-cli-bridge` and adds a `phone-bridge` alias for your current shell.
+
+If you already downloaded the source code, you can also run this from the project directory:
+
+```bash
+./install.sh
+```
+
+### Usage
+
+Start the bridge:
+
+```bash
+phone-bridge -r
+```
+
+After startup, the terminal prints a URL that your phone can access, similar to:
+
+```text
+http://<LAN-IP>:8765?token=qteqpid
+```
+
+Open this URL in your phone browser. Do not use `localhost`, because `localhost` on the phone points to the phone itself.
+
+It is recommended to add the browser page to your phone home screen so you can open it quickly like an app.
+
+Common startup options:
+
+```bash
+phone-bridge -r -p 8766 -t qteqpid -n Treehouse -cmd "your-cli-command"
+```
+
+- `-p, --port`: specify the port, default `8765`; exits directly if the specified port is occupied
+- `-t, --token`: specify the access token; generated automatically on each start if omitted
+- `-n, --title`: specify the web page title; defaults to `Phone CLI` if omitted
+- `-w, --workdir`: specify the CLI working directory; defaults to the current directory if omitted
+- `-s, --session`: specify the tmux session name; defaults to `phone-cli` if omitted
+- `-cmd, --cmd`: specify the command to start inside the tmux session; if omitted, only the session is created
+
+Full example:
+
+```bash
+phone-bridge -r -w /path/to/project -s phone-cli -p 8765 -t qteqpid -n "Phone CLI" -cmd "your-cli-command"
+```
+
+Stop the bridge:
+
+```bash
+phone-bridge -k
+```
+
+Security recommendations:
+
+- Use it only on trusted LANs or through Tailscale/WireGuard
+- Do not expose the port directly to the public internet
+- If you use a fixed token, do not share the URL with untrusted people
+
+<a id="chinese"></a>
+
+## 中文
+
+### 这个工具做什么用
 
 Phone CLI Bridge 用手机浏览器远程控制 Mac 上的 tmux CLI 会话。
 
@@ -20,7 +116,7 @@ iPhone Safari
 
 <img src="./phone_screen.jpg" alt="网页端截图" width="280">
 
-## 如何安装
+### 如何安装
 
 推荐用一行命令安装：
 
@@ -36,8 +132,7 @@ iPhone Safari
 ./install.sh
 ```
 
-
-## 如何使用
+### 如何使用
 
 启动 bridge：
 
@@ -54,7 +149,6 @@ http://<LAN-IP>:8765?token=qteqpid
 在手机浏览器打开这个 URL。不要用 `localhost`，手机上的 `localhost` 指的是手机自己。
 
 建议把这个浏览器页面添加到手机主屏幕，之后可以像打开 App 一样快速进入。
-
 
 常用启动参数：
 
@@ -80,7 +174,6 @@ phone-bridge -r -w /path/to/project -s phone-cli -p 8765 -t qteqpid -n "Phone CL
 ```bash
 phone-bridge -k
 ```
-
 
 安全建议：
 
