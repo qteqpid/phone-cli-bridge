@@ -54,7 +54,7 @@ phone-bridge -r
 After startup, the terminal prints a URL that your phone can access, similar to:
 
 ```text
-http://<LAN-IP>:8765?token=qteqpid
+http://<LAN-IP>:8765?token=your_token
 ```
 
 Open this URL in your phone browser. Do not use `localhost`, because `localhost` on the phone points to the phone itself.
@@ -64,7 +64,7 @@ It is recommended to add the browser page to your phone home screen so you can o
 Common startup options:
 
 ```bash
-phone-bridge -r -p 8766 -t qteqpid -n Treehouse -cmd "your-cli-command"
+phone-bridge -r -p 8766 -t your_token -n Treehouse -cmd "your-cli-command"
 ```
 
 - `-p, --port`: specify the port, default `8765`; exits directly if the specified port is occupied
@@ -77,7 +77,7 @@ phone-bridge -r -p 8766 -t qteqpid -n Treehouse -cmd "your-cli-command"
 Full example:
 
 ```bash
-phone-bridge -r -w /path/to/project -s phone-cli -p 8765 -t qteqpid -n "Phone CLI" -cmd "your-cli-command"
+phone-bridge -r -w /path/to/project -s phone-cli -p 8765 -t your_token -n "Phone CLI" -cmd "your-cli-command"
 ```
 
 Stop the bridge:
@@ -143,7 +143,7 @@ phone-bridge -r
 启动后终端会打印手机可访问的 URL，类似：
 
 ```text
-http://<LAN-IP>:8765?token=qteqpid
+http://<LAN-IP>:8765?token=your_token
 ```
 
 在手机浏览器打开这个 URL。不要用 `localhost`，手机上的 `localhost` 指的是手机自己。
@@ -153,7 +153,7 @@ http://<LAN-IP>:8765?token=qteqpid
 常用启动参数：
 
 ```bash
-phone-bridge -r -p 8766 -t qteqpid -n Treehouse -cmd "your-cli-command"
+phone-bridge -r -p 8766 -t your_token -n Treehouse -cmd "your-cli-command"
 ```
 
 - `-p, --port`：指定端口，默认 `8765`；指定后端口被占用会直接退出
@@ -166,7 +166,7 @@ phone-bridge -r -p 8766 -t qteqpid -n Treehouse -cmd "your-cli-command"
 完整示例：
 
 ```bash
-phone-bridge -r -w /path/to/project -s phone-cli -p 8765 -t qteqpid -n "Phone CLI" -cmd "your-cli-command"
+phone-bridge -r -w /path/to/project -s phone-cli -p 8765 -t your_token -n "Phone CLI" -cmd "your-cli-command"
 ```
 
 停止 bridge：

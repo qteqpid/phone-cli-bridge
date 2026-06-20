@@ -56,6 +56,7 @@ const CONFIG_DIR = process.env.PHONE_CLI_CONFIG_DIR
 const TOOLS_PATH = process.env.PHONE_CLI_TOOLS_PATH
   || join(CONFIG_DIR, "tools.json");
 const HISTORY_PATH = join(CONFIG_DIR, "history.json");
+const SENT_HISTORY_PATH = join(CONFIG_DIR, "sent-history", `${SAFE_SESSION}.json`);
 const MAX_HISTORY_ITEMS = 200;
 const MAX_HISTORY_TEXT_LENGTH = 4000;
 const BATTERY_STATUS_TTL_MS = Number(process.env.PHONE_CLI_BATTERY_STATUS_TTL_MS || 30 * 1000);
@@ -680,6 +681,33 @@ function addHistory(text) {
   }
 }
 
+function readSentHistory() {
+  if (!existsSync(SENT_HISTORY_PATH)) return [];
+  try {
+    const raw = readFileSync(SENT_HISTORY_PATH, "utf8");
+    return normalizeHistory(JSON.parse(raw));
+  } catch {
+    return [];
+  }
+}
+
+function writeSentHistory(history) {
+  const normalized = normalizeHistory(history);
+  mkdirSync(dirname(SENT_HISTORY_PATH), { recursive: true });
+  writeFileSync(SENT_HISTORY_PATH, `${JSON.stringify(normalized, null, 2)}\n`, { mode: 0o600 });
+  return normalized;
+}
+
+function addSentHistory(text) {
+  const value = String(text || "").trim();
+  if (!value) return readSentHistory();
+  try {
+    return writeSentHistory([value, ...readSentHistory().filter((item) => item !== value)]);
+  } catch {
+    return readSentHistory();
+  }
+}
+
 function localHistoryPaths() {
   const shellName = basename(process.env.SHELL || "");
   const candidates = [];
@@ -965,6 +993,15 @@ function page() {
       margin: 0 auto;
     }
 
+    .target-go.is-active,
+    .target-settings.is-active,
+    .sent-history-open.is-active {
+      border-color: rgba(215, 255, 98, .72);
+      background: rgba(215, 255, 98, .18);
+      color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(215, 255, 98, .1);
+    }
+
     .tool-menu {
       display: grid;
       gap: 0;
@@ -989,6 +1026,13 @@ function page() {
       grid-template-columns: minmax(0, 1fr) 34px;
       gap: 8px;
       min-width: 0;
+    }
+
+    .tool-empty {
+      padding: 8px 2px 2px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
     }
 
     .tool-run {
@@ -1356,6 +1400,7 @@ function page() {
     main {
       flex: 1 1 0;
       min-height: 0;
+      position: relative;
       display: flex;
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -1369,7 +1414,7 @@ function page() {
       min-height: 0;
       height: auto;
       margin: 0;
-      padding: 14px;
+      padding: 14px 52px 48px 14px;
       overflow: auto;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
@@ -1434,6 +1479,66 @@ function page() {
       font-size: 12px;
     }
 
+    .sent-history-open {
+      position: absolute;
+      right: 8px;
+      top: 8px;
+      width: 38px;
+      min-height: 28px;
+      padding: 0;
+      border-color: rgba(97, 214, 255, .28);
+      background: rgba(32, 38, 31, .88);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .refresh-output {
+      position: absolute;
+      right: 8px;
+      bottom: 8px;
+      display: inline-grid;
+      place-items: center;
+      width: 30px;
+      min-height: 28px;
+      padding: 0;
+      border-color: rgba(97, 214, 255, .28);
+      background: rgba(32, 38, 31, .88);
+      color: var(--muted);
+    }
+
+    .refresh-output svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .refresh-output.refreshing svg {
+      animation: refresh-spin .75s linear infinite;
+    }
+
+    .refresh-toast {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      z-index: 2;
+      transform: translate(-50%, -50%);
+      padding: 8px 12px;
+      border: 1px solid rgba(215, 255, 98, .28);
+      border-radius: 8px;
+      background: rgba(16, 20, 15, .92);
+      color: var(--text);
+      font-size: 13px;
+      box-shadow: var(--shadow);
+      pointer-events: none;
+    }
+
+    .refresh-toast[hidden] {
+      display: none;
+    }
+
+    @keyframes refresh-spin {
+      to { transform: rotate(360deg); }
+    }
+
     .composer-note {
       position: absolute;
       left: 12px;
@@ -1469,6 +1574,27 @@ function page() {
       display: none;
     }
 
+    .sent-history-panel {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: calc(100% + 6px);
+      z-index: 31;
+      display: grid;
+      gap: 4px;
+      max-height: 220px;
+      padding: 6px;
+      overflow: auto;
+      border: 1px solid rgba(97, 214, 255, .24);
+      border-radius: 8px;
+      background: rgba(16, 20, 15, .98);
+      box-shadow: var(--shadow);
+    }
+
+    .sent-history-panel[hidden] {
+      display: none;
+    }
+
     .history-suggestion {
       display: flex;
       align-items: center;
@@ -1485,6 +1611,25 @@ function page() {
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+
+    .sent-history-item {
+      min-height: 36px;
+      padding: 8px 10px;
+      border: 1px solid rgba(148, 160, 131, .18);
+      border-radius: 6px;
+      background: rgba(28, 34, 26, .95);
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.25;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .sent-history-empty {
+      padding: 8px 10px;
+      color: var(--muted);
+      font-size: 12px;
     }
 
     .history-suggestion:focus,
@@ -1655,8 +1800,7 @@ function page() {
         </div>
         <button id="tool-settings" class="target-settings" type="button" aria-label="快捷指令设置">
           <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"></path>
-            <path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.04.04a2.1 2.1 0 1 1-2.97 2.97l-.04-.04a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.1 1.65V21.4a2.1 2.1 0 1 1-4.2 0v-.06a1.8 1.8 0 0 0-1.1-1.65 1.8 1.8 0 0 0-1.98.36l-.04.04a2.1 2.1 0 1 1-2.97-2.97l.04-.04A1.8 1.8 0 0 0 4.6 15a1.8 1.8 0 0 0-1.65-1.1H2.9a2.1 2.1 0 1 1 0-4.2h.06A1.8 1.8 0 0 0 4.6 8.6a1.8 1.8 0 0 0-.36-1.98l-.04-.04a2.1 2.1 0 1 1 2.97-2.97l.04.04a1.8 1.8 0 0 0 1.98.36 1.8 1.8 0 0 0 1.1-1.65V2.3a2.1 2.1 0 1 1 4.2 0v.06a1.8 1.8 0 0 0 1.1 1.65 1.8 1.8 0 0 0 1.98-.36l.04-.04a2.1 2.1 0 1 1 2.97 2.97l-.04.04a1.8 1.8 0 0 0-.36 1.98 1.8 1.8 0 0 0 1.65 1.1h.06a2.1 2.1 0 1 1 0 4.2h-.06A1.8 1.8 0 0 0 19.4 15Z"></path>
+            <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"></path>
           </svg>
         </button>
       </div>
@@ -1680,19 +1824,6 @@ function page() {
               <button id="tool-add" type="submit">保存</button>
             </div>
         </form>
-        </div>
-      </div>
-      <div id="app-alert-modal" class="tool-modal alert-modal" role="alertdialog" aria-modal="true" aria-labelledby="app-alert-title" hidden>
-        <div class="tool-modal-panel alert-panel">
-          <div class="tool-modal-head alert-head">
-            <div class="alert-badge" id="app-alert-badge">ALERT</div>
-            <div id="app-alert-title" class="tool-modal-title alert-title">提示</div>
-            <button id="app-alert-close" class="tool-close" type="button" aria-label="关闭提示">x</button>
-          </div>
-          <div id="app-alert-message" class="tool-note alert-message" aria-live="assertive"></div>
-          <div class="tool-modal-actions">
-            <button id="app-alert-ok" type="button">知道了</button>
-          </div>
         </div>
       </div>
       <div id="delete-tool-modal" class="tool-modal" hidden>
@@ -1723,13 +1854,24 @@ function page() {
 
     <main>
       <pre id="terminal">waiting for connection...</pre>
+      <button id="refresh-output" class="refresh-output" type="button" aria-label="刷新终端输出">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12a9 9 0 0 1-15.2 6.5"></path>
+          <path d="M3 12A9 9 0 0 1 18.2 5.5"></path>
+          <path d="M18 2v4h4"></path>
+          <path d="M6 22v-4H2"></path>
+        </svg>
+      </button>
+      <div id="refresh-toast" class="refresh-toast" role="status" aria-live="polite" hidden>刷新中</div>
     </main>
 
     <footer id="composer">
       <div class="input-row">
         <div class="message-field">
           <div id="history-suggestions" class="history-suggestions" hidden></div>
+          <div id="sent-history-panel" class="sent-history-panel" hidden></div>
           <textarea id="message" placeholder="输入要发送的话"></textarea>
+          <button id="sent-history-open" class="sent-history-open" type="button" aria-label="显示发送历史">历史</button>
           <button id="pick-image" class="pick-image" type="button" aria-label="添加图片">图片</button>
           <input id="image-input" class="image-input" type="file" accept="image/*" multiple />
           <div id="composer-note" class="composer-note"></div>
@@ -1745,6 +1887,20 @@ function page() {
         <button data-key="Down">Down</button>
       </div>
     </footer>
+  </div>
+
+  <div id="app-alert-modal" class="tool-modal alert-modal" role="alertdialog" aria-modal="true" aria-labelledby="app-alert-title" hidden>
+    <div class="tool-modal-panel alert-panel">
+      <div class="tool-modal-head alert-head">
+        <div class="alert-badge" id="app-alert-badge">ALERT</div>
+        <div id="app-alert-title" class="tool-modal-title alert-title">提示</div>
+        <button id="app-alert-close" class="tool-close" type="button" aria-label="关闭提示">x</button>
+      </div>
+      <div id="app-alert-message" class="tool-note alert-message" aria-live="assertive"></div>
+      <div class="tool-modal-actions">
+        <button id="app-alert-ok" type="button">知道了</button>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -1786,7 +1942,11 @@ function page() {
     const message = document.querySelector("#message");
     const composer = document.querySelector("#composer");
     const sendButton = document.querySelector("#send");
+    const sentHistoryOpen = document.querySelector("#sent-history-open");
+    const sentHistoryPanel = document.querySelector("#sent-history-panel");
     const pickImage = document.querySelector("#pick-image");
+    const refreshOutput = document.querySelector("#refresh-output");
+    const refreshToast = document.querySelector("#refresh-toast");
     const imageInput = document.querySelector("#image-input");
     const imageList = document.querySelector("#image-list");
     const composerNote = document.querySelector("#composer-note");
@@ -1797,13 +1957,22 @@ function page() {
     const batteryWarningThreshold = 10;
     const batteryWarningCooldownMs = 10 * 60 * 1000;
     const batteryWarningKey = "phone-cli-last-battery-warning-at";
+    const terminalPullRefreshThreshold = 56;
+    const terminalAutoFollowResumeMs = 2000;
     let customTools = [];
     let pendingDeleteToolId = "";
     let selectedImages = [];
     let displayedWorkdir = "";
     let selectedDir = "";
     let historyItems = [];
+    let sentHistoryItems = [];
     let source = null;
+    let terminalTouchStartY = 0;
+    let terminalPullRefreshReady = false;
+    let terminalAutoFollow = true;
+    let terminalTouchActive = false;
+    let terminalProgrammaticScroll = false;
+    let terminalAutoFollowTimer = 0;
 
     if (savedToken) {
       localStorage.setItem("phone-cli-token", savedToken);
@@ -1964,9 +2133,9 @@ function page() {
       try {
         if (button) button.disabled = true;
         toolNote.textContent = "发送中...";
-        await api("/send", { text: tool.command, images: [] });
+        await api("/send", { text: tool.command, images: [], recordSent: false });
         toolNote.textContent = "已发送：" + tool.name;
-        toolMenu.hidden = true;
+        closeToolMenu();
         await refresh();
       } catch (error) {
         toolNote.textContent = error.message;
@@ -1990,8 +2159,66 @@ function page() {
       historySuggestions.textContent = "";
     }
 
+    function hideSentHistoryPanel() {
+      sentHistoryPanel.hidden = true;
+      sentHistoryPanel.textContent = "";
+      sentHistoryOpen.classList.remove("is-active");
+    }
+
+    function closeToolMenu() {
+      toolMenu.hidden = true;
+      toolSettings.classList.remove("is-active");
+    }
+
+    function closeDirPicker() {
+      dirPicker.hidden = true;
+      goDirButton.classList.remove("is-active");
+    }
+
     function previewHistoryText(text) {
       return String(text || "").replace(/\\s+/g, " ").trim();
+    }
+
+    function renderSentHistoryPanel() {
+      sentHistoryPanel.textContent = "";
+
+      if (sentHistoryItems.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "sent-history-empty";
+        empty.textContent = "暂无发送历史";
+        sentHistoryPanel.append(empty);
+        return;
+      }
+
+      for (const text of sentHistoryItems) {
+        const item = document.createElement("div");
+        item.className = "sent-history-item";
+        item.textContent = text;
+        item.title = previewHistoryText(text);
+        sentHistoryPanel.append(item);
+      }
+    }
+
+    async function loadSentHistory() {
+      try {
+        const payload = await api("/sent-history", {});
+        sentHistoryItems = Array.isArray(payload.history) ? payload.history : [];
+      } catch {
+        sentHistoryItems = [];
+      }
+    }
+
+    async function toggleSentHistoryPanel() {
+      if (!sentHistoryPanel.hidden) {
+        hideSentHistoryPanel();
+        return;
+      }
+
+      hideHistorySuggestions();
+      await loadSentHistory();
+      renderSentHistoryPanel();
+      sentHistoryPanel.hidden = false;
+      sentHistoryOpen.classList.add("is-active");
     }
 
     function renderHistorySuggestions() {
@@ -2073,6 +2300,14 @@ function page() {
 
     function renderTools() {
       toolList.textContent = "";
+      if (customTools.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "tool-empty";
+        empty.textContent = "快捷指令可以保存常用输入，一点就能发送。";
+        toolList.append(empty);
+        return;
+      }
+
       for (const tool of customTools) {
         const item = document.createElement("div");
         item.className = "tool-item";
@@ -2176,12 +2411,66 @@ function page() {
       }
     }
 
-    async function refresh() {
+    function terminalIsAtBottom() {
+      return terminal.scrollHeight - terminal.scrollTop - terminal.clientHeight <= 2;
+    }
+
+    function clearTerminalAutoFollowTimer() {
+      if (!terminalAutoFollowTimer) return;
+      clearTimeout(terminalAutoFollowTimer);
+      terminalAutoFollowTimer = 0;
+    }
+
+    function scrollTerminalToBottom() {
+      terminalProgrammaticScroll = true;
+      terminal.scrollTop = terminal.scrollHeight;
+      requestAnimationFrame(() => {
+        terminalProgrammaticScroll = false;
+      });
+    }
+
+    function resumeTerminalAutoFollow() {
+      terminalAutoFollow = true;
+      clearTerminalAutoFollowTimer();
+      scrollTerminalToBottom();
+    }
+
+    function scheduleTerminalAutoFollowResume() {
+      clearTerminalAutoFollowTimer();
+      terminalAutoFollowTimer = setTimeout(resumeTerminalAutoFollow, terminalAutoFollowResumeMs);
+    }
+
+    function updateTerminalSnapshot(snapshot, { forceFollow = false } = {}) {
+      const shouldFollow = forceFollow || terminalAutoFollow || terminalIsAtBottom();
+      terminal.textContent = snapshot || "";
+      if (shouldFollow) scrollTerminalToBottom();
+    }
+
+    async function refresh({ forceFollow = true } = {}) {
       const res = await fetch("/snapshot?token=" + encodeURIComponent(token()));
       const payload = await res.json();
       if (!res.ok || payload.ok === false) throw new Error(payload.error || res.statusText);
-      terminal.textContent = payload.snapshot || "";
-      terminal.scrollTop = terminal.scrollHeight;
+      updateTerminalSnapshot(payload.snapshot, { forceFollow });
+    }
+
+    async function refreshOutputView() {
+      const startedAt = Date.now();
+      try {
+        refreshOutput.disabled = true;
+        refreshOutput.classList.add("refreshing");
+        refreshToast.hidden = false;
+        await refresh();
+      } catch (error) {
+        terminal.textContent = error.message;
+      } finally {
+        const remaining = 1000 - (Date.now() - startedAt);
+        if (remaining > 0) {
+          await new Promise((resolve) => setTimeout(resolve, remaining));
+        }
+        refreshOutput.disabled = false;
+        refreshOutput.classList.remove("refreshing");
+        refreshToast.hidden = true;
+      }
     }
 
     async function connect() {
@@ -2200,12 +2489,11 @@ function page() {
       source.addEventListener("error", () => setStatus("reconnecting", false));
       source.addEventListener("snapshot", (event) => {
         const payload = JSON.parse(event.data);
-        terminal.textContent = payload.snapshot || "";
-        terminal.scrollTop = terminal.scrollHeight;
+        updateTerminalSnapshot(payload.snapshot);
       });
       source.addEventListener("status", (event) => {
         const payload = JSON.parse(event.data);
-        setStatus(payload.running ? "tmux running" : "tmux idle", payload.running);
+        setStatus(payload.running ? "running" : "idle", payload.running);
         displayedWorkdir = payload.workdir || "";
         workdir.textContent = displayedWorkdir || "未知";
         maybeShowBatteryWarning(payload.battery);
@@ -2214,8 +2502,10 @@ function page() {
 
     toolSettings.addEventListener("click", () => {
       toolMenu.hidden = !toolMenu.hidden;
+      toolSettings.classList.toggle("is-active", !toolMenu.hidden);
       if (!toolMenu.hidden) {
-        dirPicker.hidden = true;
+        closeDirPicker();
+        hideSentHistoryPanel();
         toolNote.textContent = "";
         renderTools();
       }
@@ -2267,8 +2557,10 @@ function page() {
 
     goDirButton.addEventListener("click", async () => {
       dirPicker.hidden = !dirPicker.hidden;
+      goDirButton.classList.toggle("is-active", !dirPicker.hidden);
       if (!dirPicker.hidden) {
-        toolMenu.hidden = true;
+        closeToolMenu();
+        hideSentHistoryPanel();
         try {
           const payload = await api("/status", {});
           displayedWorkdir = payload.workdir || displayedWorkdir;
@@ -2281,7 +2573,7 @@ function page() {
     });
 
     dirClose.addEventListener("click", () => {
-      dirPicker.hidden = true;
+      closeDirPicker();
     });
 
     dirApply.addEventListener("click", async () => {
@@ -2290,7 +2582,7 @@ function page() {
         const payload = await api("/cd", { path: selectedDir });
         displayedWorkdir = payload.workdir || selectedDir;
         workdir.textContent = displayedWorkdir || "未知";
-        dirPicker.hidden = true;
+        closeDirPicker();
         await refresh();
       } catch (error) {
         dirCurrent.textContent = error.message;
@@ -2300,6 +2592,54 @@ function page() {
     });
 
     pickImage.addEventListener("click", () => imageInput.click());
+
+    sentHistoryOpen.addEventListener("click", toggleSentHistoryPanel);
+
+    refreshOutput.addEventListener("click", refreshOutputView);
+
+    terminal.addEventListener("scroll", () => {
+      if (terminalProgrammaticScroll) return;
+      if (terminalIsAtBottom()) {
+        terminalAutoFollow = true;
+        clearTerminalAutoFollowTimer();
+        return;
+      }
+
+      terminalAutoFollow = false;
+      if (!terminalTouchActive) scheduleTerminalAutoFollowResume();
+    }, { passive: true });
+
+    terminal.addEventListener("touchstart", (event) => {
+      if (event.touches.length !== 1) return;
+      terminalTouchActive = true;
+      terminalTouchStartY = event.touches[0].clientY;
+      terminalPullRefreshReady = false;
+      clearTerminalAutoFollowTimer();
+    }, { passive: true });
+
+    terminal.addEventListener("touchmove", (event) => {
+      if (event.touches.length !== 1) return;
+      const pulledUp = terminalTouchStartY - event.touches[0].clientY;
+      terminalPullRefreshReady = pulledUp >= terminalPullRefreshThreshold && terminalIsAtBottom();
+    }, { passive: true });
+
+    terminal.addEventListener("touchend", () => {
+      if (terminalPullRefreshReady && terminalIsAtBottom()) {
+        refreshOutputView();
+      } else if (terminalIsAtBottom()) {
+        resumeTerminalAutoFollow();
+      } else {
+        scheduleTerminalAutoFollowResume();
+      }
+      terminalTouchActive = false;
+      terminalPullRefreshReady = false;
+    }, { passive: true });
+
+    terminal.addEventListener("touchcancel", () => {
+      terminalTouchActive = false;
+      terminalPullRefreshReady = false;
+      if (!terminalIsAtBottom()) scheduleTerminalAutoFollowResume();
+    });
 
     imageInput.addEventListener("change", () => {
       const files = [...imageInput.files];
@@ -2337,9 +2677,11 @@ function page() {
         sendButton.disabled = true;
         const text = message.value;
         const images = await imagePayloads();
-        await api("/send", { text, images });
+        const payload = await api("/send", { text, images, recordSent: true });
+        sentHistoryItems = Array.isArray(payload.sentHistory) ? payload.sentHistory : sentHistoryItems;
         message.value = "";
         hideHistorySuggestions();
+        hideSentHistoryPanel();
         await loadHistory();
         clearImages();
         await refresh();
@@ -2369,10 +2711,14 @@ function page() {
       }
       if (event.key === "Escape") {
         hideHistorySuggestions();
+        hideSentHistoryPanel();
       }
     });
 
-    message.addEventListener("input", renderHistorySuggestions);
+    message.addEventListener("input", () => {
+      hideSentHistoryPanel();
+      renderHistorySuggestions();
+    });
     message.addEventListener("focus", () => {
       app.classList.add("composer-focused");
       composer.classList.add("composer-focused");
@@ -2448,12 +2794,20 @@ const server = createServer(async (req, res) => {
       const body = await readBody(req, MAX_SEND_BODY_BYTES);
       const result = await sendMessage(body.text, body.images);
       if (result.ok) addHistory(body.text);
+      if (result.ok && body.recordSent === true) {
+        result.sentHistory = addSentHistory(body.text);
+      }
       json(res, result.ok ? 200 : 400, result);
       return;
     }
 
     if (req.method === "POST" && url.pathname === "/history") {
       json(res, 200, { ok: true, history: readHistory() });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/sent-history") {
+      json(res, 200, { ok: true, history: readSentHistory() });
       return;
     }
 
