@@ -1077,7 +1077,7 @@ function page() {
       background: #0c0f0b;
       color: var(--text);
       outline: none;
-      font-size: 13px;
+      font-size: 16px;
     }
 
     input.tool-field {
@@ -1090,7 +1090,6 @@ function page() {
       min-height: 58px;
       max-height: 58px;
       padding: 9px 10px;
-      font-size: 13px;
     }
 
     .tool-note {
@@ -1101,6 +1100,117 @@ function page() {
 
     .tool-note:empty {
       display: none;
+    }
+
+    .alert-modal {
+      z-index: 30;
+      display: block;
+      padding: 0;
+      background:
+        radial-gradient(circle at 50% 42%, rgba(255, 196, 87, .18), transparent 34%),
+        rgba(0, 0, 0, .72);
+      backdrop-filter: blur(10px);
+    }
+
+    .alert-panel {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      gap: 12px;
+      width: min(430px, calc(100vw - 32px));
+      max-height: calc(100dvh - 32px);
+      overflow: auto;
+      padding: 14px;
+      border-color: rgba(255, 196, 87, .78);
+      background:
+        linear-gradient(135deg, rgba(255, 196, 87, .23), rgba(255, 109, 109, .12)),
+        rgba(33, 25, 15, .98);
+      box-shadow:
+        0 22px 70px rgba(0, 0, 0, .58),
+        0 0 0 1px rgba(255, 243, 196, .08) inset,
+        0 0 36px rgba(255, 196, 87, .16);
+    }
+
+    .alert-head {
+      align-items: flex-start;
+    }
+
+    .alert-badge {
+      flex: 0 0 auto;
+      padding: 4px 7px;
+      border: 1px solid rgba(255, 196, 87, .62);
+      border-radius: 6px;
+      background: rgba(255, 196, 87, .18);
+      color: #ffd27a;
+      font-size: 10px;
+      font-weight: 780;
+      line-height: 1;
+    }
+
+    .alert-title {
+      color: #fff4d1;
+      font-size: 15px;
+    }
+
+    .alert-message {
+      min-height: 0;
+      padding: 10px 11px;
+      border: 1px solid rgba(255, 196, 87, .34);
+      border-radius: 8px;
+      background: rgba(12, 8, 3, .36);
+      color: #fff8e6;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .alert-panel .tool-close {
+      color: #ffd27a;
+    }
+
+    .alert-panel .tool-modal-actions button {
+      border-color: rgba(255, 196, 87, .58);
+      background: #ffd27a;
+      color: #23170a;
+      font-weight: 780;
+    }
+
+    .alert-modal[data-tone="error"] {
+      background:
+        radial-gradient(circle at 50% 42%, rgba(255, 109, 109, .2), transparent 34%),
+        rgba(0, 0, 0, .74);
+    }
+
+    .alert-modal[data-tone="error"] .alert-panel {
+      border-color: rgba(255, 109, 109, .82);
+      background:
+        linear-gradient(135deg, rgba(255, 109, 109, .24), rgba(255, 196, 87, .08)),
+        rgba(35, 17, 17, .98);
+      box-shadow:
+        0 22px 70px rgba(0, 0, 0, .58),
+        0 0 0 1px rgba(255, 223, 223, .08) inset,
+        0 0 36px rgba(255, 109, 109, .16);
+    }
+
+    .alert-modal[data-tone="error"] .alert-badge,
+    .alert-modal[data-tone="error"] .alert-message {
+      border-color: rgba(255, 109, 109, .46);
+    }
+
+    .alert-modal[data-tone="error"] .alert-badge {
+      background: rgba(255, 109, 109, .18);
+      color: #ffb7b7;
+    }
+
+    .alert-modal[data-tone="error"] .alert-title,
+    .alert-modal[data-tone="error"] .tool-close {
+      color: #ffe0e0;
+    }
+
+    .alert-modal[data-tone="error"] .tool-modal-actions button {
+      border-color: rgba(255, 109, 109, .62);
+      background: #ff8f8f;
+      color: #240b0b;
     }
 
     .dir-picker {
@@ -1190,6 +1300,12 @@ function page() {
       font: inherit;
     }
 
+    input,
+    textarea,
+    select {
+      font-size: 16px;
+    }
+
     textarea {
       width: 100%;
       border: 1px solid var(--line);
@@ -1207,7 +1323,6 @@ function page() {
       padding: 12px;
       overflow: auto;
       line-height: 1.42;
-      font-size: 15px;
     }
 
     textarea:focus {
@@ -1455,6 +1570,12 @@ function page() {
       grid-row: 1 / span 2;
     }
 
+    @media (max-width: 779px) {
+      footer.composer-focused .button-grid {
+        display: none;
+      }
+    }
+
     @media (min-width: 780px) {
       .app {
         max-width: 1040px;
@@ -1551,15 +1672,16 @@ function page() {
         </form>
         </div>
       </div>
-      <div id="battery-modal" class="tool-modal" hidden>
-        <div class="tool-modal-panel">
-          <div class="tool-modal-head">
-            <div class="tool-modal-title">电脑电量不足</div>
-            <button id="battery-close" class="tool-close" type="button" aria-label="关闭电量提醒">x</button>
+      <div id="app-alert-modal" class="tool-modal alert-modal" role="alertdialog" aria-modal="true" aria-labelledby="app-alert-title" hidden>
+        <div class="tool-modal-panel alert-panel">
+          <div class="tool-modal-head alert-head">
+            <div class="alert-badge" id="app-alert-badge">ALERT</div>
+            <div id="app-alert-title" class="tool-modal-title alert-title">提示</div>
+            <button id="app-alert-close" class="tool-close" type="button" aria-label="关闭提示">x</button>
           </div>
-          <div id="battery-message" class="tool-note"></div>
+          <div id="app-alert-message" class="tool-note alert-message" aria-live="assertive"></div>
           <div class="tool-modal-actions">
-            <button id="battery-ok" type="button">知道了</button>
+            <button id="app-alert-ok" type="button">知道了</button>
           </div>
         </div>
       </div>
@@ -1593,7 +1715,7 @@ function page() {
       <pre id="terminal">waiting for connection...</pre>
     </main>
 
-    <footer>
+    <footer id="composer">
       <div class="input-row">
         <div class="message-field">
           <div id="history-suggestions" class="history-suggestions" hidden></div>
@@ -1633,10 +1755,12 @@ function page() {
     const toolClose = document.querySelector("#tool-close");
     const toolNote = document.querySelector("#tool-note");
     const toolModalNote = document.querySelector("#tool-modal-note");
-    const batteryModal = document.querySelector("#battery-modal");
-    const batteryMessage = document.querySelector("#battery-message");
-    const batteryClose = document.querySelector("#battery-close");
-    const batteryOk = document.querySelector("#battery-ok");
+    const appAlertModal = document.querySelector("#app-alert-modal");
+    const appAlertBadge = document.querySelector("#app-alert-badge");
+    const appAlertTitle = document.querySelector("#app-alert-title");
+    const appAlertMessage = document.querySelector("#app-alert-message");
+    const appAlertClose = document.querySelector("#app-alert-close");
+    const appAlertOk = document.querySelector("#app-alert-ok");
     const deleteToolModal = document.querySelector("#delete-tool-modal");
     const deleteToolMessage = document.querySelector("#delete-tool-message");
     const deleteToolClose = document.querySelector("#delete-tool-close");
@@ -1649,6 +1773,7 @@ function page() {
     const dirApply = document.querySelector("#dir-apply");
     const dirClose = document.querySelector("#dir-close");
     const message = document.querySelector("#message");
+    const composer = document.querySelector("#composer");
     const sendButton = document.querySelector("#send");
     const pickImage = document.querySelector("#pick-image");
     const imageInput = document.querySelector("#image-input");
@@ -1658,7 +1783,7 @@ function page() {
     const savedToken = new URL(location.href).searchParams.get("token") || localStorage.getItem("phone-cli-token") || "";
     const maxImageCount = ${MAX_IMAGE_COUNT};
     const maxImageBytes = ${MAX_IMAGE_BYTES};
-    const batteryWarningThreshold = 20;
+    const batteryWarningThreshold = 10;
     const batteryWarningCooldownMs = 10 * 60 * 1000;
     const batteryWarningKey = "phone-cli-last-battery-warning-at";
     let customTools = [];
@@ -1690,8 +1815,16 @@ function page() {
       localStorage.setItem(batteryWarningKey, String(Date.now()));
     }
 
-    function closeBatteryWarning() {
-      batteryModal.hidden = true;
+    function showAlert({ title = "提示", message = "", badge = "ALERT", tone = "warning" } = {}) {
+      appAlertBadge.textContent = badge;
+      appAlertTitle.textContent = title;
+      appAlertMessage.textContent = message;
+      appAlertModal.dataset.tone = tone;
+      appAlertModal.hidden = false;
+    }
+
+    function closeAlert() {
+      appAlertModal.hidden = true;
     }
 
     function maybeShowBatteryWarning(battery) {
@@ -1701,8 +1834,12 @@ function page() {
 
       markBatteryWarningShown();
       const state = battery.state ? "，状态：" + battery.state : "";
-      batteryMessage.textContent = "电脑当前电量 " + battery.percent + "%" + state + "，请尽快连接电源。";
-      batteryModal.hidden = false;
+      showAlert({
+        title: "电脑电量不足",
+        badge: "POWER",
+        tone: "warning",
+        message: "电脑当前电量 " + battery.percent + "%" + state + "，请尽快连接电源。",
+      });
     }
 
     function formatBytes(bytes) {
@@ -2080,10 +2217,10 @@ function page() {
       if (event.target === toolModal) closeToolModal();
     });
 
-    batteryClose.addEventListener("click", closeBatteryWarning);
-    batteryOk.addEventListener("click", closeBatteryWarning);
-    batteryModal.addEventListener("click", (event) => {
-      if (event.target === batteryModal) closeBatteryWarning();
+    appAlertClose.addEventListener("click", closeAlert);
+    appAlertOk.addEventListener("click", closeAlert);
+    appAlertModal.addEventListener("click", (event) => {
+      if (event.target === appAlertModal) closeAlert();
     });
 
     deleteToolClose.addEventListener("click", closeDeleteToolModal);
@@ -2226,10 +2363,14 @@ function page() {
 
     message.addEventListener("input", renderHistorySuggestions);
     message.addEventListener("focus", () => {
+      composer.classList.add("composer-focused");
       loadHistory();
     });
     message.addEventListener("blur", () => {
-      setTimeout(hideHistorySuggestions, 120);
+      setTimeout(() => {
+        hideHistorySuggestions();
+        composer.classList.remove("composer-focused");
+      }, 120);
     });
 
     renderTools();
@@ -2352,18 +2493,25 @@ setInterval(async () => {
 
 function printStartup(port, fallbackFrom) {
   activePort = port;
-  const urls = [`http://localhost:${port}`]
-    .concat(getLANAddresses().map((address) => `http://${address}:${port}`));
+  const urls = getLANAddresses().map((address) => `http://${address}:${port}`);
   console.log("");
   console.log("Phone CLI Bridge 已启动。");
   if (fallbackFrom !== null) {
     console.log(`端口 ${fallbackFrom} 被占用，已自动改用端口 ${port}。`);
   }
   console.log("");
-  console.log("1. 在手机浏览器打开下面任意一个地址：");
-  for (const url of urls) {
-    console.log(`   ${url}?token=${TOKEN}`);
+  if (urls.length > 0) {
+    console.log("1. 在手机浏览器打开下面任意一个地址：");
+    for (const url of urls) {
+      console.log(`   ${url}?token=${TOKEN}`);
+    }
+  } else {
+    console.log("1. 没有检测到可供手机访问的局域网 IP。");
+    console.log("   请确认 Mac 和手机在同一个 Wi-Fi，或用 Tailscale/WireGuard 等内网地址访问。");
   }
+  console.log("");
+  console.log(`   本机调试地址： http://localhost:${port}?token=${TOKEN}`);
+  console.log("   注意：手机浏览器不能使用 localhost，手机上的 localhost 指向手机自己。");
   console.log("");
   console.log("2. 如果 CLI 要求输入 Mac 密码，请在 iTerm2 里处理：");
   console.log(`   tmux attach -t ${SESSION}`);
