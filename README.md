@@ -28,7 +28,7 @@ iPhone Safari
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/qteqpid/phone-cli-bridge/master/install.sh)"
 ```
 
-安装脚本会检查 Homebrew、Node.js、tmux 和 git；缺少时会询问是否安装。默认会安装到 `~/my_repos/phone-cli-bridge`，并根据当前 shell 写入 `phone-bridge` alias。创建目录、安装依赖、拉取代码、写入 shell 配置前都会先让用户确认。
+安装脚本会检查安装 Homebrew、Node.js、tmux 和 git 并拉取项目代码，默认会安装到 `~/my_repos/phone-cli-bridge`，并根据当前 shell 写入 `phone-bridge` alias。
 
 如果已经下载了源码，也可以在项目目录里运行：
 
@@ -36,11 +36,6 @@ iPhone Safari
 ./install.sh
 ```
 
-如果同意写入 alias，安装完成后加载 alias：
-
-```bash
-source <安装脚本最后输出的 shell 配置文件路径>
-```
 
 ## 如何使用
 
@@ -59,6 +54,7 @@ http://<LAN-IP>:8765?token=qteqpid
 在手机浏览器打开这个 URL。不要用 `localhost`，手机上的 `localhost` 指的是手机自己。
 
 建议把这个浏览器页面添加到手机主屏幕，之后可以像打开 App 一样快速进入。
+
 
 常用启动参数：
 
@@ -79,23 +75,12 @@ phone-bridge -r -p 8766 -t qteqpid -n Treehouse -cmd "your-cli-command"
 phone-bridge -r -w /path/to/project -s phone-cli -p 8765 -t qteqpid -n "Phone CLI" -cmd "your-cli-command"
 ```
 
-接回 tmux 会话：
-
-```bash
-tmux attach -t phone-cli
-```
-
 停止 bridge：
 
 ```bash
 phone-bridge -k
 ```
 
-只停止 tmux 会话：
-
-```bash
-tmux kill-session -t phone-cli
-```
 
 安全建议：
 
