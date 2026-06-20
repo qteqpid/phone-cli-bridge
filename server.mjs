@@ -1571,6 +1571,16 @@ function page() {
     }
 
     @media (max-width: 779px) {
+      .app.composer-focused {
+        padding-bottom: 4px;
+        gap: 6px;
+      }
+
+      footer.composer-focused {
+        gap: 4px;
+        padding: 8px;
+      }
+
       footer.composer-focused .button-grid {
         display: none;
       }
@@ -1739,6 +1749,7 @@ function page() {
 
   <script>
     const terminal = document.querySelector("#terminal");
+    const app = document.querySelector(".app");
     const statusText = document.querySelector("#status");
     const dot = document.querySelector("#dot");
     const workdir = document.querySelector("#workdir");
@@ -2363,12 +2374,14 @@ function page() {
 
     message.addEventListener("input", renderHistorySuggestions);
     message.addEventListener("focus", () => {
+      app.classList.add("composer-focused");
       composer.classList.add("composer-focused");
       loadHistory();
     });
     message.addEventListener("blur", () => {
       setTimeout(() => {
         hideHistorySuggestions();
+        app.classList.remove("composer-focused");
         composer.classList.remove("composer-focused");
       }, 120);
     });
