@@ -2,7 +2,7 @@
 
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { homedir, networkInterfaces, tmpdir } from "node:os";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
@@ -60,6 +60,7 @@ const SENT_HISTORY_PATH = join(CONFIG_DIR, "sent-history", `${SAFE_SESSION}.json
 const MAX_HISTORY_ITEMS = 200;
 const MAX_HISTORY_TEXT_LENGTH = 4000;
 const BATTERY_STATUS_TTL_MS = Number(process.env.PHONE_CLI_BATTERY_STATUS_TTL_MS || 30 * 1000);
+const SNAPSHOT_STABLE_ALERT_MS = Number(process.env.PHONE_CLI_SNAPSHOT_STABLE_ALERT_MS || 10 * 1000);
 
 const IMAGE_EXTENSIONS = new Map([
   ["image/gif", ".gif"],
@@ -72,6 +73,8 @@ const IMAGE_EXTENSIONS = new Map([
 
 const clients = new Set();
 let lastSnapshot = "";
+let observedSnapshotHash = "";
+let observedSnapshotChangedAt = 0;
 let activePort = PORT;
 let currentWorkdir = resolve(WORKDIR);
 let batteryStatusCache = { checkedAt: 0, value: null };
@@ -338,6 +341,35 @@ function broadcast(event, data) {
   for (const client of clients) {
     sendSSE(client, event, data);
   }
+}
+
+function hashSnapshot(snapshot) {
+  return createHash("sha256").update(String(snapshot || "")).digest("hex");
+}
+
+function snapshotStabilityPayload(now = Date.now()) {
+  const stableMs = observedSnapshotChangedAt > 0 ? now - observedSnapshotChangedAt : 0;
+  return {
+    snapshotHash: observedSnapshotHash,
+    snapshotChangedAt: observedSnapshotChangedAt,
+    snapshotStableMs: stableMs,
+    snapshotStable: stableMs >= SNAPSHOT_STABLE_ALERT_MS,
+    snapshotStableAlertMs: SNAPSHOT_STABLE_ALERT_MS,
+  };
+}
+
+function observeSnapshot(snapshot) {
+  const hash = hashSnapshot(snapshot);
+  const now = Date.now();
+
+  if (hash !== observedSnapshotHash) {
+    observedSnapshotHash = hash;
+    observedSnapshotChangedAt = now;
+  } else if (observedSnapshotChangedAt === 0) {
+    observedSnapshotChangedAt = now;
+  }
+
+  return snapshotStabilityPayload(now);
 }
 
 async function readBody(req, maxBytes = 64 * 1024) {
@@ -815,7 +847,7 @@ function getLANAddresses() {
   return addresses;
 }
 
-async function statusPayload() {
+async function statusPayload(snapshotStability = snapshotStabilityPayload()) {
   const [tmuxAvailable, running, workdir, battery] = await Promise.all([
     hasTmux(),
     sessionExists(),
@@ -833,6 +865,7 @@ async function statusPayload() {
     running,
     captureLines: CAPTURE_LINES,
     battery,
+    ...snapshotStability,
   };
 }
 
@@ -1959,6 +1992,7 @@ function page() {
     const batteryWarningKey = "phone-cli-last-battery-warning-at";
     const terminalPullRefreshThreshold = 56;
     const terminalAutoFollowResumeMs = 2000;
+    const alertSoundDurationMs = 520;
     let customTools = [];
     let pendingDeleteToolId = "";
     let selectedImages = [];
@@ -1973,6 +2007,11 @@ function page() {
     let terminalTouchActive = false;
     let terminalProgrammaticScroll = false;
     let terminalAutoFollowTimer = 0;
+    let alertAudioContext = null;
+    let alertSoundUnlocked = false;
+    let lastObservedSnapshotHash = "";
+    let stableSnapshotAlertArmed = false;
+    let stableSnapshotAlertStartedAt = 0;
 
     if (savedToken) {
       localStorage.setItem("phone-cli-token", savedToken);
@@ -2020,6 +2059,109 @@ function page() {
         tone: "warning",
         message: "电脑当前电量 " + battery.percent + "%" + state + "，请尽快连接电源。",
       });
+    }
+
+    function getAlertAudioContext() {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return null;
+      if (!alertAudioContext) alertAudioContext = new AudioContextClass();
+      return alertAudioContext;
+    }
+
+    function unlockAlertSound() {
+      if (alertSoundUnlocked) return;
+      const context = getAlertAudioContext();
+      if (!context) return;
+
+      const resume = context.state === "suspended" ? context.resume() : Promise.resolve();
+      resume
+        .then(() => {
+          const oscillator = context.createOscillator();
+          const gain = context.createGain();
+          gain.gain.setValueAtTime(0, context.currentTime);
+          oscillator.connect(gain);
+          gain.connect(context.destination);
+          oscillator.start();
+          oscillator.stop(context.currentTime + 0.01);
+          alertSoundUnlocked = true;
+        })
+        .catch(() => {
+          alertSoundUnlocked = false;
+        });
+    }
+
+    function playStableSnapshotSound() {
+      const context = getAlertAudioContext();
+      if (!context) return;
+
+      const startSound = () => {
+        const start = context.currentTime;
+        const gain = context.createGain();
+        const first = context.createOscillator();
+        const second = context.createOscillator();
+
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(0.34, start + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + alertSoundDurationMs / 1000);
+
+        first.type = "sine";
+        first.frequency.setValueAtTime(880, start);
+        first.frequency.setValueAtTime(740, start + 0.16);
+
+        second.type = "triangle";
+        second.frequency.setValueAtTime(1320, start + 0.18);
+
+        first.connect(gain);
+        second.connect(gain);
+        gain.connect(context.destination);
+
+        first.start(start);
+        second.start(start + 0.18);
+        first.stop(start + 0.34);
+        second.stop(start + alertSoundDurationMs / 1000);
+      };
+
+      const resume = context.state === "suspended" ? context.resume() : Promise.resolve();
+      resume.then(startSound).catch(() => {});
+    }
+
+    function armStableSnapshotAlert() {
+      stableSnapshotAlertArmed = true;
+      stableSnapshotAlertStartedAt = Date.now();
+    }
+
+    function cancelStableSnapshotAlert() {
+      stableSnapshotAlertArmed = false;
+      stableSnapshotAlertStartedAt = 0;
+    }
+
+    function maybePlayStableSnapshotAlert(payload) {
+      const hash = String(payload.snapshotHash || "");
+      if (!hash) return;
+      const stableAlertMs = Number(payload.snapshotStableAlertMs || 10000);
+      const now = Date.now();
+
+      if (!lastObservedSnapshotHash) {
+        lastObservedSnapshotHash = hash;
+        if (stableSnapshotAlertArmed && stableSnapshotAlertStartedAt === 0) {
+          stableSnapshotAlertStartedAt = now;
+        }
+        return;
+      }
+
+      if (hash !== lastObservedSnapshotHash) {
+        lastObservedSnapshotHash = hash;
+        if (stableSnapshotAlertArmed) stableSnapshotAlertStartedAt = now;
+        return;
+      }
+
+      if (!stableSnapshotAlertArmed) return;
+      if (stableSnapshotAlertStartedAt === 0) stableSnapshotAlertStartedAt = now;
+      if (now - stableSnapshotAlertStartedAt < stableAlertMs) return;
+
+      stableSnapshotAlertArmed = false;
+      stableSnapshotAlertStartedAt = 0;
+      playStableSnapshotSound();
     }
 
     function formatBytes(bytes) {
@@ -2450,6 +2592,7 @@ function page() {
       const res = await fetch("/snapshot?token=" + encodeURIComponent(token()));
       const payload = await res.json();
       if (!res.ok || payload.ok === false) throw new Error(payload.error || res.statusText);
+      maybePlayStableSnapshotAlert(payload);
       updateTerminalSnapshot(payload.snapshot, { forceFollow });
     }
 
@@ -2497,6 +2640,7 @@ function page() {
         displayedWorkdir = payload.workdir || "";
         workdir.textContent = displayedWorkdir || "未知";
         maybeShowBatteryWarning(payload.battery);
+        maybePlayStableSnapshotAlert(payload);
       });
     }
 
@@ -2597,6 +2741,9 @@ function page() {
 
     refreshOutput.addEventListener("click", refreshOutputView);
 
+    window.addEventListener("pointerdown", unlockAlertSound, { passive: true });
+    window.addEventListener("keydown", unlockAlertSound);
+
     terminal.addEventListener("scroll", () => {
       if (terminalProgrammaticScroll) return;
       if (terminalIsAtBottom()) {
@@ -2677,6 +2824,7 @@ function page() {
         sendButton.disabled = true;
         const text = message.value;
         const images = await imagePayloads();
+        armStableSnapshotAlert();
         const payload = await api("/send", { text, images, recordSent: true });
         sentHistoryItems = Array.isArray(payload.sentHistory) ? payload.sentHistory : sentHistoryItems;
         message.value = "";
@@ -2686,6 +2834,7 @@ function page() {
         clearImages();
         await refresh();
       } catch (error) {
+        cancelStableSnapshotAlert();
         terminal.textContent = error.message;
       } finally {
         sendButton.disabled = false;
@@ -2768,8 +2917,10 @@ const server = createServer(async (req, res) => {
         connection: "keep-alive",
       });
       clients.add(res);
-      sendSSE(res, "status", await statusPayload());
-      sendSSE(res, "snapshot", { snapshot: await capturePane() });
+      const snapshot = await capturePane();
+      const snapshotStability = observeSnapshot(snapshot);
+      sendSSE(res, "status", await statusPayload(snapshotStability));
+      sendSSE(res, "snapshot", { snapshot, ...snapshotStability });
       req.on("close", () => clients.delete(res));
       return;
     }
@@ -2780,7 +2931,9 @@ const server = createServer(async (req, res) => {
     }
 
     if (req.method === "GET" && url.pathname === "/snapshot") {
-      json(res, 200, { ok: true, snapshot: await capturePane() });
+      const snapshot = await capturePane();
+      const snapshotStability = observeSnapshot(snapshot);
+      json(res, 200, { ok: true, snapshot, ...snapshotStability });
       return;
     }
 
@@ -2850,11 +3003,13 @@ const server = createServer(async (req, res) => {
 
 setInterval(async () => {
   if (clients.size === 0) return;
-  const [status, snapshot] = await Promise.all([statusPayload(), capturePane()]);
+  const snapshot = await capturePane();
+  const snapshotStability = observeSnapshot(snapshot);
+  const status = await statusPayload(snapshotStability);
   broadcast("status", status);
   if (snapshot !== lastSnapshot) {
     lastSnapshot = snapshot;
-    broadcast("snapshot", { snapshot });
+    broadcast("snapshot", { snapshot, ...snapshotStability });
   }
 }, 1200).unref();
 
