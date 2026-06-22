@@ -2046,7 +2046,6 @@ function page() {
     const batteryWarningCooldownMs = 10 * 60 * 1000;
     const batteryWarningKey = "phone-cli-last-battery-warning-at";
     const terminalPullRefreshThreshold = 56;
-    const terminalAutoFollowResumeMs = 2000;
     const alertSoundDurationMs = 520;
     const sentHistoryLongPressMs = 650;
     const sentHistoryLongPressMoveThreshold = 12;
@@ -2063,7 +2062,7 @@ function page() {
     let terminalAutoFollow = true;
     let terminalTouchActive = false;
     let terminalProgrammaticScroll = false;
-    let terminalAutoFollowTimer = 0;
+    let terminalPendingSnapshot = null;
     let alertAudioContext = null;
     let alertSoundUnlocked = false;
     let lastObservedSnapshotHash = "";
@@ -2734,12 +2733,6 @@ function page() {
       return terminal.scrollHeight - terminal.scrollTop - terminal.clientHeight <= 2;
     }
 
-    function clearTerminalAutoFollowTimer() {
-      if (!terminalAutoFollowTimer) return;
-      clearTimeout(terminalAutoFollowTimer);
-      terminalAutoFollowTimer = 0;
-    }
-
     function scrollTerminalToBottom() {
       terminalProgrammaticScroll = true;
       terminal.scrollTop = terminal.scrollHeight;
@@ -2748,21 +2741,32 @@ function page() {
       });
     }
 
-    function resumeTerminalAutoFollow() {
-      terminalAutoFollow = true;
-      clearTerminalAutoFollowTimer();
-      scrollTerminalToBottom();
+    function renderTerminalSnapshot(snapshot, { follow = false } = {}) {
+      terminal.textContent = snapshot || "";
+      if (follow) scrollTerminalToBottom();
     }
 
-    function scheduleTerminalAutoFollowResume() {
-      clearTerminalAutoFollowTimer();
-      terminalAutoFollowTimer = setTimeout(resumeTerminalAutoFollow, terminalAutoFollowResumeMs);
+    function resumeTerminalAutoFollow() {
+      terminalAutoFollow = true;
+      if (terminalPendingSnapshot !== null) {
+        const snapshot = terminalPendingSnapshot;
+        terminalPendingSnapshot = null;
+        renderTerminalSnapshot(snapshot, { follow: true });
+        return;
+      }
+      scrollTerminalToBottom();
     }
 
     function updateTerminalSnapshot(snapshot, { forceFollow = false } = {}) {
       const shouldFollow = forceFollow || terminalAutoFollow || terminalIsAtBottom();
-      terminal.textContent = snapshot || "";
-      if (shouldFollow) scrollTerminalToBottom();
+      if (!shouldFollow) {
+        terminalPendingSnapshot = snapshot || "";
+        return;
+      }
+
+      terminalAutoFollow = true;
+      terminalPendingSnapshot = null;
+      renderTerminalSnapshot(snapshot, { follow: true });
     }
 
     async function refresh({ forceFollow = true } = {}) {
@@ -2924,13 +2928,11 @@ function page() {
     terminal.addEventListener("scroll", () => {
       if (terminalProgrammaticScroll) return;
       if (terminalIsAtBottom()) {
-        terminalAutoFollow = true;
-        clearTerminalAutoFollowTimer();
+        resumeTerminalAutoFollow();
         return;
       }
 
       terminalAutoFollow = false;
-      if (!terminalTouchActive) scheduleTerminalAutoFollowResume();
     }, { passive: true });
 
     terminal.addEventListener("touchstart", (event) => {
@@ -2938,7 +2940,6 @@ function page() {
       terminalTouchActive = true;
       terminalTouchStartY = event.touches[0].clientY;
       terminalPullRefreshReady = false;
-      clearTerminalAutoFollowTimer();
     }, { passive: true });
 
     terminal.addEventListener("touchmove", (event) => {
@@ -2953,7 +2954,7 @@ function page() {
       } else if (terminalIsAtBottom()) {
         resumeTerminalAutoFollow();
       } else {
-        scheduleTerminalAutoFollowResume();
+        terminalAutoFollow = false;
       }
       terminalTouchActive = false;
       terminalPullRefreshReady = false;
@@ -2962,7 +2963,7 @@ function page() {
     terminal.addEventListener("touchcancel", () => {
       terminalTouchActive = false;
       terminalPullRefreshReady = false;
-      if (!terminalIsAtBottom()) scheduleTerminalAutoFollowResume();
+      if (!terminalIsAtBottom()) terminalAutoFollow = false;
     });
 
     imageInput.addEventListener("change", () => {
