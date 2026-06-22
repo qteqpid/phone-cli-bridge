@@ -3,6 +3,7 @@
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { connect as connectSocket } from "node:net";
 import { homedir, networkInterfaces, tmpdir } from "node:os";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
@@ -847,6 +848,37 @@ function getLANAddresses() {
   return addresses;
 }
 
+function probeAddress(address, port, timeoutMs = 350) {
+  return new Promise((resolve) => {
+    const socket = connectSocket({ host: address, port });
+    let settled = false;
+
+    const finish = (reachable) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve(reachable);
+    };
+
+    socket.setTimeout(timeoutMs);
+    socket.once("connect", () => finish(true));
+    socket.once("timeout", () => finish(false));
+    socket.once("error", () => finish(false));
+  });
+}
+
+async function probeLANAddresses(port) {
+  const addresses = getLANAddresses();
+  const results = await Promise.all(addresses.map(async (address) => {
+    return {
+      address,
+      reachable: await probeAddress(address, port),
+    };
+  }));
+
+  return results.sort((left, right) => Number(right.reachable) - Number(left.reachable));
+}
+
 async function statusPayload(snapshotStability = snapshotStabilityPayload()) {
   const [tmuxAvailable, running, workdir, battery] = await Promise.all([
     hasTmux(),
@@ -1552,15 +1584,25 @@ function page() {
       position: absolute;
       left: 50%;
       top: 50%;
-      z-index: 2;
+      z-index: 12;
       transform: translate(-50%, -50%);
-      padding: 8px 12px;
-      border: 1px solid rgba(215, 255, 98, .28);
+      min-width: 180px;
+      max-width: min(86vw, 420px);
+      padding: 14px 18px;
+      border: 1px solid rgba(215, 255, 98, .72);
       border-radius: 8px;
-      background: rgba(16, 20, 15, .92);
-      color: var(--text);
-      font-size: 13px;
-      box-shadow: var(--shadow);
+      background:
+        linear-gradient(135deg, rgba(215, 255, 98, .2), rgba(97, 214, 255, .12)),
+        rgba(10, 13, 9, .98);
+      color: #f8ffe4;
+      font-size: 16px;
+      font-weight: 780;
+      line-height: 1.35;
+      text-align: center;
+      box-shadow:
+        0 22px 70px rgba(0, 0, 0, .55),
+        0 0 0 1px rgba(255, 255, 255, .08) inset,
+        0 0 34px rgba(215, 255, 98, .18);
       pointer-events: none;
     }
 
@@ -1653,10 +1695,23 @@ function page() {
       border-radius: 6px;
       background: rgba(28, 34, 26, .95);
       color: var(--text);
+      cursor: pointer;
       font-size: 13px;
       line-height: 1.25;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
+      user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    .sent-history-item.is-pressing {
+      border-color: rgba(97, 214, 255, .42);
+      background: rgba(30, 47, 45, .96);
+    }
+
+    .sent-history-item.is-appended {
+      border-color: rgba(215, 255, 98, .55);
+      background: rgba(45, 55, 28, .96);
     }
 
     .sent-history-empty {
@@ -1993,6 +2048,8 @@ function page() {
     const terminalPullRefreshThreshold = 56;
     const terminalAutoFollowResumeMs = 2000;
     const alertSoundDurationMs = 520;
+    const sentHistoryLongPressMs = 650;
+    const sentHistoryLongPressMoveThreshold = 12;
     let customTools = [];
     let pendingDeleteToolId = "";
     let selectedImages = [];
@@ -2012,6 +2069,8 @@ function page() {
     let lastObservedSnapshotHash = "";
     let stableSnapshotAlertArmed = false;
     let stableSnapshotAlertStartedAt = 0;
+    let composerNoteTimer = 0;
+    let toastTimer = 0;
 
     if (savedToken) {
       localStorage.setItem("phone-cli-token", savedToken);
@@ -2182,7 +2241,59 @@ function page() {
     }
 
     function setComposerNote(text) {
+      if (composerNoteTimer) {
+        clearTimeout(composerNoteTimer);
+        composerNoteTimer = 0;
+      }
       composerNote.textContent = text || "";
+    }
+
+    function setTemporaryComposerNote(text, timeoutMs = 1600) {
+      setComposerNote(text);
+      composerNoteTimer = setTimeout(() => {
+        composerNote.textContent = "";
+        composerNoteTimer = 0;
+      }, timeoutMs);
+    }
+
+    function showToast(text, timeoutMs = 1800) {
+      if (toastTimer) {
+        clearTimeout(toastTimer);
+        toastTimer = 0;
+      }
+      refreshToast.textContent = text;
+      refreshToast.hidden = false;
+      toastTimer = setTimeout(() => {
+        refreshToast.hidden = true;
+        toastTimer = 0;
+      }, timeoutMs);
+    }
+
+    function hideToast() {
+      if (toastTimer) {
+        clearTimeout(toastTimer);
+        toastTimer = 0;
+      }
+      refreshToast.hidden = true;
+    }
+
+    function appendTextToMessage(text) {
+      const value = String(text || "");
+      if (!value) return;
+      const current = message.value;
+      const separator = current && !current.endsWith("\\n") ? "\\n" : "";
+      message.value = current + separator + value;
+      message.dispatchEvent(new Event("input", { bubbles: true }));
+      if (document.activeElement === message) {
+        message.setSelectionRange(message.value.length, message.value.length);
+      }
+    }
+
+    function appendSentHistoryItem(text, item) {
+      appendTextToMessage(text);
+      item.classList.add("is-appended");
+      showToast("已追加到输入框");
+      setTimeout(() => item.classList.remove("is-appended"), 900);
     }
 
     function renderImages() {
@@ -2274,13 +2385,13 @@ function page() {
     async function runTool(tool, button) {
       try {
         if (button) button.disabled = true;
-        toolNote.textContent = "发送中...";
+        showToast("发送中");
         await api("/send", { text: tool.command, images: [], recordSent: false });
-        toolNote.textContent = "已发送：" + tool.name;
+        showToast("已发送：" + tool.name);
         closeToolMenu();
         await refresh();
       } catch (error) {
-        toolNote.textContent = error.message;
+        showToast(error.message, 1800);
       } finally {
         if (button) button.disabled = false;
       }
@@ -2292,7 +2403,7 @@ function page() {
         customTools = Array.isArray(payload.tools) ? payload.tools : [];
         renderTools();
       } catch (error) {
-        toolNote.textContent = error.message;
+        showToast(error.message, 1800);
       }
     }
 
@@ -2321,6 +2432,71 @@ function page() {
       return String(text || "").replace(/\\s+/g, " ").trim();
     }
 
+    function attachSentHistoryLongPress(item, text) {
+      let timer = 0;
+      let startX = 0;
+      let startY = 0;
+      let didAppend = false;
+      let longPressReached = false;
+
+      const clearLongPress = () => {
+        if (!timer) return;
+        clearTimeout(timer);
+        timer = 0;
+      };
+
+      const startLongPress = (event) => {
+        if (event.pointerType === "mouse" && event.button !== 0) return;
+        event.preventDefault();
+        clearLongPress();
+        didAppend = false;
+        longPressReached = false;
+        startX = event.clientX;
+        startY = event.clientY;
+        item.classList.add("is-pressing");
+        timer = setTimeout(() => {
+          timer = 0;
+          longPressReached = true;
+          item.classList.remove("is-pressing");
+          item.classList.add("is-pressing");
+          setTemporaryComposerNote("松手追加");
+        }, sentHistoryLongPressMs);
+      };
+
+      const moveLongPress = (event) => {
+        if (!timer) return;
+        const moved = Math.hypot(event.clientX - startX, event.clientY - startY);
+        if (moved < sentHistoryLongPressMoveThreshold) return;
+        clearLongPress();
+        longPressReached = false;
+        item.classList.remove("is-pressing");
+      };
+
+      const endLongPress = () => {
+        clearLongPress();
+        item.classList.remove("is-pressing");
+        const shouldAppend = longPressReached && !didAppend;
+        longPressReached = false;
+        if (shouldAppend) {
+          appendSentHistoryItem(text, item);
+          didAppend = true;
+        }
+      };
+
+      item.addEventListener("pointerdown", startLongPress);
+      item.addEventListener("pointermove", moveLongPress);
+      item.addEventListener("pointerup", endLongPress);
+      item.addEventListener("pointercancel", endLongPress);
+      item.addEventListener("pointerleave", endLongPress);
+      item.addEventListener("contextmenu", (event) => {
+        if (!didAppend) {
+          appendSentHistoryItem(text, item);
+          didAppend = true;
+        }
+        event.preventDefault();
+      });
+    }
+
     function renderSentHistoryPanel() {
       sentHistoryPanel.textContent = "";
 
@@ -2337,6 +2513,7 @@ function page() {
         item.className = "sent-history-item";
         item.textContent = text;
         item.title = previewHistoryText(text);
+        attachSentHistoryLongPress(item, text);
         sentHistoryPanel.append(item);
       }
     }
@@ -2431,12 +2608,12 @@ function page() {
 
     async function deleteTool(id) {
       try {
-        toolNote.textContent = "删除中...";
+        showToast("删除中");
         await saveTools(customTools.filter((tool) => tool.id !== id));
         closeDeleteToolModal();
-        toolNote.textContent = "已删除";
+        showToast("已删除");
       } catch (error) {
-        toolNote.textContent = error.message;
+        showToast(error.message, 1800);
       }
     }
 
@@ -2601,7 +2778,7 @@ function page() {
       try {
         refreshOutput.disabled = true;
         refreshOutput.classList.add("refreshing");
-        refreshToast.hidden = false;
+        showToast("刷新中");
         await refresh();
       } catch (error) {
         terminal.textContent = error.message;
@@ -2612,7 +2789,7 @@ function page() {
         }
         refreshOutput.disabled = false;
         refreshOutput.classList.remove("refreshing");
-        refreshToast.hidden = true;
+        hideToast();
       }
     }
 
@@ -2693,7 +2870,7 @@ function page() {
         const id = window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : String(Date.now() + Math.random());
         await saveTools(customTools.concat([{ id, name, command }]));
         closeToolModal();
-        toolNote.textContent = "已新增：" + name;
+        showToast("已新增：" + name);
       } catch (error) {
         toolModalNote.textContent = error.message;
       }
@@ -2795,15 +2972,15 @@ function page() {
       for (const file of files) {
         const type = file.type || inferImageType(file.name);
         if (!type.startsWith("image/")) {
-          setComposerNote("只能选择图片文件");
+          showToast("只能选择图片文件");
           continue;
         }
         if (file.size > maxImageBytes) {
-          setComposerNote(file.name + " 超过 " + formatBytes(maxImageBytes));
+          showToast(file.name + " 超过 " + formatBytes(maxImageBytes));
           continue;
         }
         if (selectedImages.length + accepted.length >= maxImageCount) {
-          setComposerNote("最多选择 " + maxImageCount + " 张图片");
+          showToast("最多选择 " + maxImageCount + " 张图片");
           break;
         }
         accepted.push({
@@ -3013,18 +3190,37 @@ setInterval(async () => {
   }
 }, 1200).unref();
 
-function printStartup(port, fallbackFrom) {
+async function printStartup(port, fallbackFrom) {
   activePort = port;
-  const urls = getLANAddresses().map((address) => `http://${address}:${port}`);
+  const addresses = await probeLANAddresses(port);
+  const reachableUrls = addresses
+    .filter((item) => item.reachable)
+    .map((item) => `http://${item.address}:${port}`);
+  const unverifiedUrls = addresses
+    .filter((item) => !item.reachable)
+    .map((item) => `http://${item.address}:${port}`);
+
   console.log("");
   console.log("Phone CLI Bridge 已启动。");
   if (fallbackFrom !== null) {
     console.log(`端口 ${fallbackFrom} 被占用，已自动改用端口 ${port}。`);
   }
   console.log("");
-  if (urls.length > 0) {
-    console.log("1. 在手机浏览器打开下面任意一个地址：");
-    for (const url of urls) {
+  if (reachableUrls.length > 0) {
+    console.log("1. 在手机浏览器打开下面任意一个已自检可达的地址：");
+    for (const url of reachableUrls) {
+      console.log(`   ${url}?token=${TOKEN}`);
+    }
+    if (unverifiedUrls.length > 0) {
+      console.log("");
+      console.log("   下面地址本机自检未通过，手机连不上时先不要用：");
+      for (const url of unverifiedUrls) {
+        console.log(`   ${url}?token=${TOKEN}`);
+      }
+    }
+  } else if (unverifiedUrls.length > 0) {
+    console.log("1. 检测到下面地址，但本机自检未通过；如果手机连不上，请换网络或用 Tailscale/WireGuard 等内网地址：");
+    for (const url of unverifiedUrls) {
       console.log(`   ${url}?token=${TOKEN}`);
     }
   } else {
@@ -3054,7 +3250,9 @@ function printStartup(port, fallbackFrom) {
 function listen(port, attemptsLeft, firstPort = port) {
   const onListening = () => {
     server.off("error", onError);
-    printStartup(port, firstPort === port ? null : firstPort);
+    printStartup(port, firstPort === port ? null : firstPort).catch((error) => {
+      console.error(`启动信息生成失败：${error.message || error}`);
+    });
   };
 
   const onError = (error) => {

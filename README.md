@@ -59,7 +59,15 @@ http://<LAN-IP>:8765?token=your_token
 
 Open this URL in your phone browser. Do not use `localhost`, because `localhost` on the phone points to the phone itself.
 
-It is recommended to add the browser page to your phone home screen so you can open it quickly like an app.
+It is recommended to add the browser page to your phone home screen so you can open it quickly like an app:
+
+1. Copy the full URL printed by `phone-bridge`, including the `token` query parameter.
+2. Open Safari on your iPhone and paste the URL into the address bar.
+3. After the page loads, tap the Safari share button.
+4. Choose **Add to Home Screen**.
+5. Confirm the name, then tap **Add**.
+
+After that, open the shortcut from the home screen. Keep the bridge terminal running on your Mac while using it.
 
 Common startup options:
 
@@ -148,7 +156,15 @@ http://<LAN-IP>:8765?token=your_token
 
 在手机浏览器打开这个 URL。不要用 `localhost`，手机上的 `localhost` 指的是手机自己。
 
-建议把这个浏览器页面添加到手机主屏幕，之后可以像打开 App 一样快速进入。
+建议把这个浏览器页面添加到手机主屏幕，之后可以像打开 App 一样快速进入：
+
+1. 复制 `phone-bridge` 启动后打印出来的完整 URL，包含后面的 `token` 参数。
+2. 打开 iPhone 上的 Safari，把 URL 粘贴到地址栏并打开。
+3. 页面加载出来后，点击 Safari 底部或顶部的“共享”按钮。
+4. 在共享菜单里选择“添加到主屏幕”。
+5. 确认名称后点击“添加”。
+
+之后从主屏幕上的快捷方式打开即可。使用时需要保持 Mac 上启动 bridge 的终端窗口不要关闭。
 
 常用启动参数：
 
