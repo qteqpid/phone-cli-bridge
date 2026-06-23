@@ -9,7 +9,7 @@
 
 ### What This Tool Does
 
-Phone CLI Bridge lets you remotely control a tmux CLI session on your Mac from a phone browser.
+Phone CLI Bridge lets you control Claude Code, Codex CLI, SSH sessions, shells, REPLs, and other tmux-backed CLI tools on your Mac from a phone browser.
 
 ```text
 iPhone Safari
@@ -21,7 +21,7 @@ iPhone Safari
 
 Your phone is only the input and display surface. Commands still run on your Mac, and file reads, file writes, builds, and tests all happen locally on the Mac.
 
-It is useful when you need to check or operate long-running command-line tasks from your phone, such as AI coding CLIs, shells, REPLs, SSH sessions, build scripts, test scripts, or other interactive terminal programs.
+It is useful when you need to check or operate long-running command-line tasks from your phone, such as AI coding agents, terminal coding assistants, build scripts, test scripts, or other interactive developer tools.
 
 Web UI example:
 
@@ -106,7 +106,7 @@ Security recommendations:
 
 ### 这个工具做什么用
 
-Phone CLI Bridge 用手机浏览器远程控制 Mac 上的 tmux CLI 会话。
+Phone CLI Bridge 用手机浏览器控制 Mac 上的 Claude Code、Codex CLI、SSH 会话、shell、REPL，以及其他基于 tmux 的 CLI 工具。
 
 ```text
 iPhone Safari
@@ -118,7 +118,7 @@ iPhone Safari
 
 手机只是输入和显示界面，真正执行命令、读写文件、跑测试的还是 Mac。
 
-它适合需要从手机查看或操作本机长时间运行的命令行任务，例如 AI coding CLI、shell、REPL、SSH 会话、构建脚本、测试脚本或其他交互式终端程序。
+它适合需要从手机查看或操作本机长时间运行的命令行任务，例如 AI coding agent、终端编程助手、构建脚本、测试脚本或其他交互式开发工具。
 
 网页端示例：
 
