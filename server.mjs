@@ -1488,6 +1488,47 @@ function page() {
       color: #dfe7d6;
     }
 
+    .term-command {
+      color: var(--accent);
+    }
+
+    .term-warning {
+      color: #ff8f8f;
+    }
+
+    .term-question {
+      color: #f8ffe4;
+    }
+
+    .term-note,
+    .term-muted {
+      color: var(--muted);
+    }
+
+    .term-code {
+      color: #ffd27a;
+    }
+
+    .term-key {
+      color: #8ee6b9;
+    }
+
+    .term-path {
+      color: var(--accent-2);
+    }
+
+    .term-url {
+      color: #c9b7ff;
+    }
+
+    .term-flag {
+      color: #8ee6b9;
+    }
+
+    .term-alert {
+      color: #ff8f8f;
+    }
+
     footer {
       flex: 0 0 auto;
       display: grid;
@@ -2276,6 +2317,173 @@ function page() {
       refreshToast.hidden = true;
     }
 
+    const terminalCommandWords = new Set([
+      "airchat",
+      "bazel",
+      "brew",
+      "cat",
+      "cd",
+      "chmod",
+      "cp",
+      "curl",
+      "docker",
+      "gh",
+      "git",
+      "go",
+      "kill",
+      "ls",
+      "mkdir",
+      "mv",
+      "node",
+      "npm",
+      "pnpm",
+      "python",
+      "python3",
+      "rg",
+      "rm",
+      "rsync",
+      "sed",
+      "swift",
+      "tmux",
+      "xcodebuild",
+      "yarn",
+    ]);
+    const terminalAlertWords = [
+      "error",
+      "exception",
+      "fail",
+      "failed",
+      "fatal",
+      "warn",
+      "warning",
+      "崩溃",
+      "报错",
+      "错误",
+      "失败",
+      "异常",
+      "警告",
+    ];
+    const terminalRequestStarts = [
+      "can ",
+      "could ",
+      "fix ",
+      "help ",
+      "how ",
+      "please ",
+      "what ",
+      "why ",
+      "帮",
+      "检查",
+      "看看",
+      "能不能",
+      "能否",
+      "请",
+      "为什么",
+      "怎么",
+      "如何",
+      "修复",
+    ];
+
+    function firstTerminalWord(text) {
+      let end = 0;
+      while (end < text.length && text[end] !== " " && text[end] !== "\t") end += 1;
+      return text.slice(0, end).toLowerCase();
+    }
+
+    function trimTerminalToken(value) {
+      const open = String.fromCharCode(34, 39, 40, 91, 123);
+      const close = String.fromCharCode(34, 39, 41, 93, 125, 46, 44, 59, 58);
+      let start = 0;
+      let end = value.length;
+      while (start < end && open.includes(value[start])) start += 1;
+      while (end > start && close.includes(value[end - 1])) end -= 1;
+      return value.slice(start, end);
+    }
+
+    function isLikelyTerminalPath(value) {
+      const lower = value.toLowerCase();
+      if (!value || value.includes("://")) return false;
+      if (value.startsWith("/") || value.startsWith("~/") || value.startsWith("./") || value.startsWith("../")) return true;
+      if (["app/", "lib/", "src/", "test/", "tests/", "tools/", "projects/"].some((prefix) => lower.startsWith(prefix))) return true;
+      return value.includes("/") && value.includes(".");
+    }
+
+    function terminalLineTone(line) {
+      const trimmed = line.trim();
+      if (!trimmed) return "";
+
+      const lower = trimmed.toLowerCase();
+      const backtick = String.fromCharCode(96);
+      if (terminalAlertWords.some((word) => lower.includes(word))) return "term-warning";
+      if (trimmed.startsWith(backtick + backtick + backtick) || trimmed.startsWith("    ")) return "term-code";
+      if (trimmed.startsWith("#") || trimmed.startsWith("//")) return "term-note";
+      if (trimmed.startsWith("|") && trimmed.endsWith("|")) return "term-muted";
+      if (trimmed.startsWith("$ ") || trimmed.startsWith("> ") || terminalCommandWords.has(firstTerminalWord(trimmed))) {
+        return "term-command";
+      }
+      if (trimmed.endsWith("?") || trimmed.endsWith("？") || terminalRequestStarts.some((word) => lower.startsWith(word))) {
+        return "term-question";
+      }
+      return "";
+    }
+
+    function terminalTokenTone(value) {
+      const clean = trimTerminalToken(value);
+      if (!clean) return "";
+
+      const lower = clean.toLowerCase();
+      if (lower.startsWith("http://") || lower.startsWith("https://")) return "term-url";
+      if (terminalAlertWords.some((word) => lower.includes(word))) return "term-alert";
+      if (isLikelyTerminalPath(clean)) return "term-path";
+      if (clean.length > 1 && clean.startsWith("-")) return "term-flag";
+      if (clean.endsWith(":") && clean.length > 1) return "term-key";
+      return "";
+    }
+
+    function appendTerminalSpan(parent, text, className) {
+      const span = document.createElement("span");
+      if (className) span.className = className;
+      span.textContent = text || String.fromCharCode(8203);
+      parent.append(span);
+    }
+
+    function appendTerminalHighlightedLine(parent, line) {
+      const lineSpan = document.createElement("span");
+      const lineTone = terminalLineTone(line);
+      if (lineTone) lineSpan.className = lineTone;
+
+      if (!line) {
+        appendTerminalSpan(lineSpan, "", "");
+        parent.append(lineSpan);
+        return;
+      }
+
+      let chunk = "";
+      let chunkIsSpace = null;
+      for (const char of line) {
+        const isSpace = char === " " || char === "\t";
+        if (chunk && isSpace !== chunkIsSpace) {
+          appendTerminalSpan(lineSpan, chunk, chunkIsSpace ? "" : terminalTokenTone(chunk));
+          chunk = "";
+        }
+        chunk += char;
+        chunkIsSpace = isSpace;
+      }
+      if (chunk) appendTerminalSpan(lineSpan, chunk, chunkIsSpace ? "" : terminalTokenTone(chunk));
+      parent.append(lineSpan);
+    }
+
+    function renderTerminalText(text) {
+      terminal.textContent = "";
+      const fragment = document.createDocumentFragment();
+      const lines = String(text || "").split("\\n");
+      for (let index = 0; index < lines.length; index += 1) {
+        appendTerminalHighlightedLine(fragment, lines[index]);
+        if (index < lines.length - 1) fragment.append(document.createTextNode("\\n"));
+      }
+      terminal.append(fragment);
+    }
+
     function appendTextToMessage(text) {
       const value = String(text || "");
       if (!value) return;
@@ -2742,7 +2950,7 @@ function page() {
     }
 
     function renderTerminalSnapshot(snapshot, { follow = false } = {}) {
-      terminal.textContent = snapshot || "";
+      renderTerminalText(snapshot || "");
       if (follow) scrollTerminalToBottom();
     }
 
@@ -2785,7 +2993,7 @@ function page() {
         showToast("刷新中");
         await refresh();
       } catch (error) {
-        terminal.textContent = error.message;
+        renderTerminalSnapshot(error.message, { follow: true });
       } finally {
         const remaining = 1000 - (Date.now() - startedAt);
         if (remaining > 0) {
@@ -2805,7 +3013,7 @@ function page() {
       try {
         await api("/start");
       } catch (error) {
-        terminal.textContent = error.message;
+        renderTerminalSnapshot(error.message, { follow: true });
       }
       if (source) source.close();
       source = new EventSource("/events?token=" + encodeURIComponent(token()));
@@ -3013,7 +3221,7 @@ function page() {
         await refresh();
       } catch (error) {
         cancelStableSnapshotAlert();
-        terminal.textContent = error.message;
+        renderTerminalSnapshot(error.message, { follow: true });
       } finally {
         sendButton.disabled = false;
       }
@@ -3025,7 +3233,7 @@ function page() {
           await api("/key", { key: button.dataset.key });
           await refresh();
         } catch (error) {
-          terminal.textContent = error.message;
+          renderTerminalSnapshot(error.message, { follow: true });
         }
       });
     }
